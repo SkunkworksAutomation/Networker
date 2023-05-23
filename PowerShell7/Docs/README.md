@@ -1,4 +1,4 @@
-# Scripts (API version 19.12):
+# Scripts (API version 19.8):
 ## Modules: 
 * dell.networker.psm1
     * PowerShell7 module that covers basic interaction with the Networker REST API
