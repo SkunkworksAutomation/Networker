@@ -78,3 +78,193 @@ function get-jobs {
         return $Results
     }
 }
+
+function new-monitor {
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory=$true)]
+        [string]$Link,
+        [Parameter( Mandatory=$false)]
+        [switch]$Mount
+    )
+    begin {}
+    process {
+        $Results = @()    
+        
+        If($Mount) {
+            # MONITOR FOR A SESSION MOUNT
+            Write-Host "[Networker]: Begining monitoring session for mount..." -ForegroundColor Yellow
+            do{
+                $Query =  Invoke-RestMethod -Uri "$($Link)" `
+                -Method GET `
+                -ContentType 'application/json' `
+                -Headers $AuthObject.token `
+                -SkipCertificateCheck
+
+                if($Query.state -eq "Queued") {
+                    Write-Host "[Networker]: STATE: $($Query.state)" -ForegroundColor Yellow
+                    start-sleep -Seconds 5
+                } 
+                elseif($Query.state -eq "Active") {
+                    Write-Host "[Networker]: STATE: $($Query.state), PROCESS: $($Query.vProxyMountState)"
+                    start-sleep -Seconds 5
+                }
+                elseif($Query.state -eq "SessionActive" -and $Query.vProxyMountState -ne "Mounted") {
+                    Write-Host "[Networker]: STATE: $($Query.state), PROCESS: $($Query.vProxyMountState)"
+                    start-sleep -Seconds 5
+                } else {
+                    Write-Host "[Networker]: STATE: $($Query.state), PROCESS: $($Query.vProxyMountState)" -ForegroundColor green
+                    $Results = $Query
+                }
+            }
+            until($Query.state -eq "SessionActive" -and $Query.vProxyMountState -eq "Mounted")
+        } else {
+            # MONITOR FOR A RECOVERY SESSION
+            Write-Host "[Networker]: Begining monitoring session for recovery..." -ForegroundColor Yellow
+            do{
+                $Query =  Invoke-RestMethod -Uri "$($Link)" `
+                -Method GET `
+                -ContentType 'application/json' `
+                -Headers $AuthObject.token `
+                -SkipCertificateCheck
+                if($Query.state -eq "Queued") {
+                    Write-Host "[Networker]: STATE: $($Query.state)" -ForegroundColor Yellow
+                    start-sleep -Seconds 5
+                } elseif($Query.state -eq "Active") {
+                    Write-Host "[Networker]: STATE: $($Query.state)"
+                    start-sleep -Seconds 5
+                } else {
+                    Write-Host "[Networker]: STATE: $($Query.state)" -ForegroundColor Green
+                    $Results = $Query
+                }
+            }
+            until($Query.state -eq "Completed")
+        }
+
+        return $Results
+    }
+}
+
+function get-protectedvms {
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory=$true)]
+        [array]$Filters
+    )
+    begin {}
+    process {
+        $Results = @()
+        
+        $Endpoint = "vmware/protectedvms"
+    
+        if($Filters.Length -gt 0) {
+            $Join = ($Filters -join ' ') -replace '\s','%20' -replace '"','%22'
+            $Endpoint = "$($Endpoint)?q=$($Join)"
+        }
+
+        $Query =  Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)" `
+        -Method GET `
+        -ContentType 'application/json' `
+        -Headers $AuthObject.token `
+        -SkipCertificateCheck
+        $Results = $Query.vms
+
+        return $Results
+    }
+}
+
+function get-backups {
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory=$true)]
+        [string]$vCenter,
+        [Parameter( Mandatory=$true)]
+        [string]$Uuid,
+        [Parameter( Mandatory=$true)]
+        [array]$Filters
+    )
+    begin {}
+    process {
+        $Results = @()
+        
+        $Endpoint = "vmware/vcenters/$($vCenter)/protectedvms/$($Uuid)/backups"
+    
+        if($Filters.Length -gt 0) {
+            $Join = ($Filters -join ' ') -replace '\s','%20' -replace '"','%22'
+            $Endpoint = "$($Endpoint)?q=$($Join)"
+        }
+
+        $Query =  Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)" `
+        -Method GET `
+        -ContentType 'application/json' `
+        -Headers $AuthObject.token `
+        -SkipCertificateCheck
+        $Results = $Query.backups
+
+        return $Results
+    }
+}
+
+function new-vmmount {
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory=$true)]
+        [string]$vCenter,
+        [Parameter( Mandatory=$true)]
+        [string]$Uuid,
+        [Parameter( Mandatory=$true)]
+        [string]$BackupId,
+        [Parameter( Mandatory=$true)]
+        [string]$InstanceId,
+        [Parameter( Mandatory=$true)]
+        [object]$Body
+
+    )
+    begin {}
+    process {
+              
+        $Endpoint = "vmware/vcenters/$($vCenter)/protectedvms/$($Uuid)/backups/$($BackupId)/instances/$($InstanceId)/op/vmmount"
+    
+        Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)" `
+        -Method POST `
+        -ContentType 'application/json' `
+        -Headers $AuthObject.token `
+        -Body ($Body | convertto-json -Depth 10) `
+        -ResponseHeadersVariable RH `
+        -SkipCertificateCheck
+
+        return $RH
+    }
+}
+
+function new-recover {
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory=$true)]
+        [string]$vCenter,
+        [Parameter( Mandatory=$true)]
+        [string]$Uuid,
+        [Parameter( Mandatory=$true)]
+        [string]$BackupId,
+        [Parameter( Mandatory=$true)]
+        [string]$InstanceId,
+        [Parameter( Mandatory=$true)]
+        [object]$Body
+
+    )
+    begin {}
+    process {
+      
+        $Endpoint = "vmware/vcenters/$($vCenter)/protectedvms/$($Uuid)/backups/$($BackupId)/instances/$($InstanceId)/op/recover"
+    
+        Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)" `
+        -Method POST `
+        -ContentType 'application/json' `
+        -Headers $AuthObject.token `
+        -Body ($Body | convertto-json -Depth 10) `
+        -ResponseHeadersVariable RH `
+        -SkipCertificateCheck
+
+        return $RH
+    }
+}
